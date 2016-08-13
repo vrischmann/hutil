@@ -21,11 +21,11 @@ logging
 
 You can get a logging middlware this way:
 
-    m := hutil.NewLoggingHandler(nil)
+    m := hutil.NewLoggingMiddleware(nil)
 
-You can configure the handler by providing a `hutil.LoggingOptions` struct:
+You can configure the middleware by providing a `hutil.LoggingOptions` struct:
 
-    m := hutil.NewLoggingHandler(&hutil.LoggingOptions{
+    m := hutil.NewLoggingMiddleware(&hutil.LoggingOptions{
         WithExecutionTime: true,
     })
 
