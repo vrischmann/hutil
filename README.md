@@ -21,12 +21,12 @@ logging
 
 You can get a logging middlware this way:
 
-    m := xhutil.NewLoggingHandler(nil)
+    m := hutil.NewLoggingHandler(nil)
 
-You can configure the handler by providing a `xhutil.LoggingOptions` struct:
+You can configure the handler by providing a `hutil.LoggingOptions` struct:
 
-    m := xhutil.NewLoggingHandler(&xhutil.LoggingOptions{
+    m := hutil.NewLoggingHandler(&hutil.LoggingOptions{
         WithExecutionTime: true,
     })
 
-Look at the documentation [here](https://godoc.org/github.com/vrischmann/xhutil#LoggingOptions) for all available options.
+Look at the documentation [here](https://godoc.org/github.com/vrischmann/hutil#LoggingOptions) for all available options.
