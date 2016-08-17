@@ -35,3 +35,8 @@ easier response helpers
 -----------------------
 
 There are some functions like `WriteOK` or `WriteError` to facilitate writing a textual response. These are useful for example when you want to return a 503, or a 401.
+
+todo
+----
+
+integrate with [httprouter](https://github.com/julienschmidt/httprouter) to automatically include the url parameters in the context.
