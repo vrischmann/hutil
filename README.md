@@ -30,3 +30,8 @@ You can configure the middleware by providing a `hutil.LoggingOptions` struct:
     })
 
 Look at the documentation [here](https://godoc.org/github.com/vrischmann/hutil#LoggingOptions) for all available options.
+
+easier response helpers
+-----------------------
+
+There are some functions like `WriteOK` or `WriteError` to facilitate writing a textual response. These are useful for example when you want to return a 503, or a 401.
