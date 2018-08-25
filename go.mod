@@ -1,4 +1,4 @@
-module github.com/vrischmann/hutil
+module github.com/vrischmann/hutil/v2
 
 require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
