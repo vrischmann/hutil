@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 )
 
 type loggingHandlerTestCase struct {
@@ -48,17 +46,29 @@ func TestLoggingHandler(t *testing.T) {
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/foo/bar/baz")
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	body, err := ioutil.ReadAll(resp.Body)
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp.Body.Close()
 
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "foobar", string(body))
-
-	require.Equal(t, http.StatusOK, data.StatusCode)
-	require.Equal(t, "/foo/bar/baz", data.Req.URL.Path)
-	require.Equal(t, len(body), data.ResponseSize)
-	require.True(t, data.Elapsed > 500*time.Millisecond)
+	if exp, got := http.StatusOK, resp.StatusCode; exp != got {
+		t.Fatalf("expected status code %d, got %d", exp, got)
+	}
+	if exp, got := "foobar", string(body); exp != got {
+		t.Fatalf("expected body %q, got %q", exp, got)
+	}
+	if exp, got := "/foo/bar/baz", data.Req.URL.Path; exp != got {
+		t.Fatalf("expected path %s, got %s", exp, got)
+	}
+	if exp, got := len(body), data.ResponseSize; exp != got {
+		t.Fatalf("expected response size %d, got %d", exp, got)
+	}
+	if exp, got := 500*time.Millisecond, data.Elapsed; got <= exp {
+		t.Fatalf("expected elapsed time to be > %s, got %s", exp, got)
+	}
 }

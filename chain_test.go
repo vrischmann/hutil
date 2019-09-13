@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func createMiddleware(buf *bytes.Buffer, s string) func(next http.Handler) http.Handler {
@@ -42,11 +40,20 @@ func TestChain(t *testing.T) {
 	defer ts.Close()
 
 	res, err := http.Get(ts.URL)
-	require.Nil(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer res.Body.Close()
-	require.Nil(t, err)
-	require.Equal(t, "foobar", string(data))
-	require.Equal(t, "m1m2m3", buf.String())
+
+	if exp, got := "foobar", string(data); exp != got {
+		t.Fatalf("expected body %q, got %q", exp, got)
+	}
+	if exp, got := "m1m2m3", buf.String(); exp != got {
+		t.Fatalf("expected %q, got %q", exp, got)
+	}
 }
