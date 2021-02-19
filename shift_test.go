@@ -1,6 +1,9 @@
 package hutil
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestShiftPath(t *testing.T) {
 	testCases := []struct {
@@ -25,4 +28,25 @@ func TestShiftPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func ExampleShiftPath() {
+	var urlPath = "/search/myhome/inventory"
+
+	var head string
+	head, urlPath = ShiftPath(urlPath)
+	switch head {
+	case "search":
+		// handler.search(w, req)
+	case "feed":
+		// handler.feed(w, req)
+	default:
+		// handler.home(w, req)
+	}
+
+	fmt.Printf("head: %s\n", head)
+	fmt.Printf("url path: %s\n", urlPath)
+	// Output:
+	// head: search
+	// url path: /myhome/inventory
 }
