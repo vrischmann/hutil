@@ -29,12 +29,15 @@ func NewLoggingMiddleware(logFn func(req *http.Request, statusCode int, response
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lw := &loggingWriter{underlying: w}
 
+			// Preserve the original path.
+			// When using ShiftPath the request is altered and thus the logging call reports a wrong path.
+			originalPath := r.URL.Path
+
 			start := time.Now()
-
 			next.ServeHTTP(lw, r)
-
 			elapsed := time.Since(start)
 
+			r.URL.Path = originalPath
 			logFn(r, lw.statusCode, lw.size, elapsed)
 		})
 	}
