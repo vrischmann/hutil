@@ -3,7 +3,7 @@ package hutil
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 )
@@ -40,7 +40,7 @@ func ExampleChain() {
 
 	res, _ := http.Get(ts.URL)
 
-	data, _ := ioutil.ReadAll(res.Body)
+	data, _ := io.ReadAll(res.Body)
 	defer res.Body.Close()
 
 	fmt.Println(string(data))
