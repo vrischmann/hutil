@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-type loggingHandlerTestCase struct {
-	path      string
-	expected  string
-	exact     bool
-	sleepTime time.Duration
-}
-
 func TestLoggingHandler(t *testing.T) {
 	var data struct {
 		StatusCode   int
