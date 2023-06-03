@@ -24,7 +24,7 @@ import (
 // This isn't always what you want, because if you have a middleware in the chain that can take some measurable time, you probably
 // want to count it too in the execution time.
 // Thus, make sure you place the logging handler at the correct place in the chain.
-func NewLoggingMiddleware(logFn func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration)) func(http.Handler) http.Handler {
+func NewLoggingMiddleware(logFn func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration)) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lw := &loggingWriter{underlying: w}
