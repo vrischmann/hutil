@@ -1,27 +1,27 @@
 # hutil
 
-# introduction
+# Introduction
 
 hutil is a set of helpers to work with `net/http`. It's limited by design, based on what I need the most in my projects.
 
-# chain
+# Middleware
 
-The most useful struct is `hutil.Chain`. It is used to chain middleware together. Look at the documentation [here](https://godoc.org/github.com/vrischmann/hutil#Chain) to see how to use it.
+The most useful type is `hutil.MiddlewareStack`. It is used to stack middlewares and wrap a [http.Handler](https://pkg.go.dev/net/http#Handler). Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v3#MiddlewareStack) to see how to use it.
 
-# middlewares
+We also provide a logging middleware. Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v3#NewLoggingMiddleware) to see how to use it.
 
-Only one middleware is provided for now, a logging middleware. Look at the documentation [here](https://godoc.org/github.com/vrischmann/hutil#Chain) to see how to use it.
-
-# logging
+# Logging
 
 You can get a logging middlware this way:
 
-    logFn := func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration) {
-        log.Printf("[%s] %s -> %d: %s", http.StatusText(statusCode), req.URL.Path, responseSize, elapsed)
-    }
-    m := hutil.NewLoggingMiddleware(logFn)
+```go
+logFn := func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration) {
+    log.Printf("[%s] %s -> %d: %s", http.StatusText(statusCode), req.URL.Path, responseSize, elapsed)
+}
+m := hutil.NewLoggingMiddleware(logFn)
+```
 
-# shift path
+# Shift path
 
 This function is useful to build complex routing based on the URL path using only the standard library HTTP package.
 
