@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 )
 
-func ExampleChain() {
+func ExampleMiddlewareStack() {
 	createMiddleware := func(buf *bytes.Buffer, s string) func(next http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -19,7 +19,7 @@ func ExampleChain() {
 	}
 
 	var (
-		c   Chain
+		s   MiddlewareStack
 		buf bytes.Buffer
 	)
 
@@ -29,11 +29,11 @@ func ExampleChain() {
 		m3 = createMiddleware(&buf, "m3")
 	)
 
-	c.Use(m1)
-	c.Use(m2)
-	c.Use(m3)
+	s.Use(m1)
+	s.Use(m2)
+	s.Use(m3)
 
-	ts := httptest.NewServer(c.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(s.Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "foobar")
 	})))
 	defer ts.Close()
