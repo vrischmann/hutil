@@ -25,16 +25,16 @@ func TestLoggingHandler(t *testing.T) {
 
 	//
 
-	var c Chain
-	c.Use(NewLoggingMiddleware(logFn))
+	var s MiddlewareStack
+	s.Use(NewLoggingMiddleware(logFn))
 
-	fh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fh := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		io.WriteString(w, "foobar")
 		time.Sleep(500 * time.Millisecond)
 	})
 
-	ts := httptest.NewServer(c.Handler(fh))
+	ts := httptest.NewServer(s.Handler(fh))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/foo/bar/baz")

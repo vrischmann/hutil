@@ -18,9 +18,9 @@ func createMiddleware(buf *bytes.Buffer, s string) func(next http.Handler) http.
 	}
 }
 
-func TestChain(t *testing.T) {
+func TestMiddlewareStack(t *testing.T) {
 	var (
-		c   Chain
+		s   MiddlewareStack
 		buf bytes.Buffer
 	)
 
@@ -30,11 +30,11 @@ func TestChain(t *testing.T) {
 		m3 = createMiddleware(&buf, "m3")
 	)
 
-	c.Use(m1)
-	c.Use(m2)
-	c.Use(m3)
+	s.Use(m1)
+	s.Use(m2)
+	s.Use(m3)
 
-	ts := httptest.NewServer(c.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewServer(s.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "foobar")
 	})))
 	defer ts.Close()
