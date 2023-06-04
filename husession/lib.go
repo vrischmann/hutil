@@ -3,6 +3,7 @@ package husession
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/vrischmann/hutil/v3"
 	"go.uber.org/zap"
@@ -20,15 +21,41 @@ type Store[ID SessionID, Value any] interface {
 
 type middleware[ID SessionID, Value any] struct {
 	logger    *zap.Logger
+	secret    SecretKey
 	store     Store[ID, Value]
 	extractor IDExtractor[ID]
+	opts      middlewareOptions
 }
 
-func NewMiddleware[ID SessionID, Value any](logger *zap.Logger, store Store[ID, Value], extractor IDExtractor[ID]) hutil.Middleware {
+type SecretKey string
+
+type middlewareOptions struct {
+	cookieName       string
+	cookieExpireTime time.Duration
+}
+
+type MiddlewareOption func(*middlewareOptions)
+
+func WithCookieName(name string) MiddlewareOption {
+	return func(opts *middlewareOptions) {
+		opts.cookieName = name
+	}
+}
+
+func NewMiddleware[ID SessionID, Value any](logger *zap.Logger, secret SecretKey, store Store[ID, Value], extractor IDExtractor[ID], opts ...MiddlewareOption) hutil.Middleware {
 	mw := &middleware[ID, Value]{
 		logger:    logger,
+		secret:    secret,
 		store:     store,
 		extractor: extractor,
+		opts: middlewareOptions{
+			cookieName:       "session",
+			cookieExpireTime: 365 * 24 * time.Hour,
+		},
+	}
+
+	for _, opt := range opts {
+		opt(&mw.opts)
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -48,8 +75,29 @@ func FromContext[Value any](ctx context.Context) *Value {
 	return value.(*Value)
 }
 
-func (m *middleware[ID, Session]) makeHandler(next http.Handler) http.Handler {
+func seal(data string) []byte {
+
+}
+
+func (m *middleware[ID, Value]) setCookie(w http.ResponseWriter, value string) {
+
+	sessionCookie := http.Cookie{
+		Name:     m.opts.cookieName,
+		Value:
+		Expires:  time.Now().Add(m.opts.cookieExpireTime),
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	}
+
+	http.SetCookie(w, &sessionCookie)
+
+}
+
+func (m *middleware[ID, Value]) makeHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// 1. Decrypt the session cookie
+
 		// 1. Try to extract the session ID
 
 		// TODO(vincent): extract the real ID
