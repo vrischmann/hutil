@@ -4,29 +4,24 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestLoggingHandler(t *testing.T) {
-	var data struct {
-		StatusCode   int
-		Req          *http.Request
-		ResponseSize int
-		Elapsed      time.Duration
-	}
-
-	logFn := func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration) {
-		data.StatusCode = statusCode
-		data.Req = req
-		data.ResponseSize = responseSize
-		data.Elapsed = elapsed
-	}
+	zapCore, zapObservedLogs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(zapCore)
 
 	//
 
 	var s MiddlewareStack
-	s.Use(NewLoggingMiddleware(logFn))
+	s.Use(NewLoggingMiddleware(logger))
 
 	fh := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -54,13 +49,31 @@ func TestLoggingHandler(t *testing.T) {
 	if exp, got := "foobar", string(body); exp != got {
 		t.Fatalf("expected body %q, got %q", exp, got)
 	}
-	if exp, got := "/foo/bar/baz", data.Req.URL.Path; exp != got {
-		t.Fatalf("expected path %s, got %s", exp, got)
+
+	logs := zapObservedLogs.All()
+	if n := len(logs); n != 1 {
+		t.Fatalf("expected one log to be produced, got %d", n)
 	}
-	if exp, got := len(body), data.ResponseSize; exp != got {
-		t.Fatalf("expected response size %d, got %d", exp, got)
+
+	logContext := logs[0].Context
+
+	if n := len(logContext); n != 4 {
+		t.Fatalf("expected 4 fields on the log line, got %d", n)
 	}
-	if exp, got := 500*time.Millisecond, data.Elapsed; got <= exp {
-		t.Fatalf("expected elapsed time to be > %s, got %s", exp, got)
-	}
+
+	require.Equal(t, "url", logContext[0].Key)
+	require.Equal(t, "/foo/bar/baz", logContext[0].Interface.(*url.URL).String())
+	require.Equal(t, zapcore.StringerType, logContext[0].Type)
+
+	require.Equal(t, "status_code", logContext[1].Key)
+	require.Equal(t, int64(200), logContext[1].Integer)
+	require.Equal(t, zapcore.Int64Type, logContext[1].Type)
+
+	require.Equal(t, "response_size", logContext[2].Key)
+	require.Equal(t, int64(6), logContext[2].Integer)
+	require.Equal(t, zapcore.Int64Type, logContext[2].Type)
+
+	require.Equal(t, "elapsed", logContext[3].Key)
+	require.InDelta(t, int64(500*time.Millisecond), logContext[3].Integer, float64(10e6)) // delta of 10ms (10 000 000 ns)
+	require.Equal(t, zapcore.DurationType, logContext[3].Type)
 }
