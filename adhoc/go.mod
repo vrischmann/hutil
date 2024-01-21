@@ -1,6 +1,6 @@
-module github.com/vrischmann/hutil/v3
+module github.com/vrischmann/hutil/adhoc/v4
 
-go 1.20
+go 1.21
 
 require (
 	github.com/stretchr/testify v1.8.0
