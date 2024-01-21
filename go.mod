@@ -1,4 +1,4 @@
-module github.com/vrischmann/hutil/bun/v4
+module github.com/vrischmann/hutil/v4
 
 go 1.21
 
