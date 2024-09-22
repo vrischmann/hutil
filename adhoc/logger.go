@@ -8,7 +8,34 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+type loggingMiddlewareOptions struct {
+	level      zapcore.Level
+	onlyErrors bool
+}
+
+func newDefaultLoggingMiddlewareOptions() *loggingMiddlewareOptions {
+	return &loggingMiddlewareOptions{
+		level:      zapcore.InfoLevel,
+		onlyErrors: false,
+	}
+}
+
+type LoggingMiddlewareOption func(*loggingMiddlewareOptions)
+
+func LogLevel(level zapcore.Level) LoggingMiddlewareOption {
+	return func(opts *loggingMiddlewareOptions) {
+		opts.level = level
+	}
+}
+
+func LogOnlyErrors(enabled bool) LoggingMiddlewareOption {
+	return func(opts *loggingMiddlewareOptions) {
+		opts.onlyErrors = enabled
+	}
+}
 
 // NewLoggingMiddleware returns a middleware that logs the requests and the results of the request as processed by the next middleware
 // (or handler) in the chain.
@@ -26,7 +53,12 @@ import (
 // This isn't always what you want, because if you have a middleware in the chain that can take some measurable time, you probably
 // want to count it too in the execution time.
 // Thus, make sure you place the logging handler at the correct place in the chain.
-func NewLoggingMiddleware(logger *zap.Logger) Middleware {
+func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) Middleware {
+	opts := newDefaultLoggingMiddlewareOptions()
+	for _, o := range opt {
+		o(opts)
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lw := &loggingWriter{underlying: w}
@@ -34,21 +66,44 @@ func NewLoggingMiddleware(logger *zap.Logger) Middleware {
 			ru := *r.URL
 			ru.Host = ""
 
-			// Preserve the original path.
-			// When using ShiftPath the request is altered and thus the logging call reports a wrong path.
-			// originalPath := ru.Path
-
 			start := time.Now()
 			next.ServeHTTP(lw, r)
 			elapsed := time.Since(start)
 
-			// r.URL.Path = originalPath
-			logger.Info("request handled",
-				zap.Stringer("url", &ru),
-				zap.Int("status_code", lw.statusCode),
-				zap.Int("response_size", lw.size),
-				zap.Duration("elapsed", elapsed),
-			)
+			switch {
+			case opts.onlyErrors && lw.statusCode < 400:
+				// No logging for non-errors
+
+			case !opts.onlyErrors && lw.statusCode < 400:
+				// Log using the provided level for non-errors
+
+				logger.Log(opts.level, "request handled",
+					zap.Stringer("url", &ru),
+					zap.Int("status_code", lw.statusCode),
+					zap.Int("response_size", lw.size),
+					zap.Duration("elapsed", elapsed),
+				)
+
+			case lw.statusCode >= 400 && lw.statusCode < 500:
+				// Log using the WARN level for 4xx errors
+
+				logger.Warn("request handled",
+					zap.Stringer("url", &ru),
+					zap.Int("status_code", lw.statusCode),
+					zap.Int("response_size", lw.size),
+					zap.Duration("elapsed", elapsed),
+				)
+
+			case lw.statusCode > 500:
+				// Log using the ERROR level for 5xx errors and up
+
+				logger.Error("request handled",
+					zap.Stringer("url", &ru),
+					zap.Int("status_code", lw.statusCode),
+					zap.Int("response_size", lw.size),
+					zap.Duration("elapsed", elapsed),
+				)
+			}
 		})
 	}
 }
