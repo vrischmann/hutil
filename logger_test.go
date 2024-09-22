@@ -57,23 +57,27 @@ func TestLoggingHandler(t *testing.T) {
 
 	logContext := logs[0].Context
 
-	if n := len(logContext); n != 4 {
-		t.Fatalf("expected 4 fields on the log line, got %d", n)
+	if n := len(logContext); n != 5 {
+		t.Fatalf("expected 5 fields on the log line, got %d", n)
 	}
 
 	require.Equal(t, "url", logContext[0].Key)
 	require.Equal(t, "/foo/bar/baz", logContext[0].Interface.(*url.URL).String())
 	require.Equal(t, zapcore.StringerType, logContext[0].Type)
 
-	require.Equal(t, "status_code", logContext[1].Key)
-	require.Equal(t, int64(200), logContext[1].Integer)
-	require.Equal(t, zapcore.Int64Type, logContext[1].Type)
+	require.Equal(t, "method", logContext[1].Key)
+	require.Equal(t, "GET", logContext[1].String)
+	require.Equal(t, zapcore.StringType, logContext[1].Type)
 
-	require.Equal(t, "response_size", logContext[2].Key)
-	require.Equal(t, int64(6), logContext[2].Integer)
+	require.Equal(t, "status_code", logContext[2].Key)
+	require.Equal(t, int64(200), logContext[2].Integer)
 	require.Equal(t, zapcore.Int64Type, logContext[2].Type)
 
-	require.Equal(t, "elapsed", logContext[3].Key)
-	require.InDelta(t, int64(500*time.Millisecond), logContext[3].Integer, float64(10e6)) // delta of 10ms (10 000 000 ns)
-	require.Equal(t, zapcore.DurationType, logContext[3].Type)
+	require.Equal(t, "response_size", logContext[3].Key)
+	require.Equal(t, int64(6), logContext[3].Integer)
+	require.Equal(t, zapcore.Int64Type, logContext[3].Type)
+
+	require.Equal(t, "elapsed", logContext[4].Key)
+	require.InDelta(t, int64(500*time.Millisecond), logContext[4].Integer, float64(10e6)) // delta of 10ms (10 000 000 ns)
+	require.Equal(t, zapcore.DurationType, logContext[4].Type)
 }

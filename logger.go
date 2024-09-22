@@ -1,10 +1,9 @@
-package bun
+package hutil
 
 import (
 	"net/http"
 	"time"
 
-	"github.com/uptrace/bunrouter"
 	"github.com/vrischmann/hutil/v4/internal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -12,27 +11,38 @@ import (
 
 type loggingMiddlewareOptions struct {
 	level      zapcore.Level
-	onlyErrors bool
+	logCheckFn func(*http.Request) bool
 }
 
 func newDefaultLoggingMiddlewareOptions() *loggingMiddlewareOptions {
 	return &loggingMiddlewareOptions{
-		level:      zapcore.InfoLevel,
-		onlyErrors: false,
+		level: zapcore.InfoLevel,
 	}
 }
 
 type LoggingMiddlewareOption func(*loggingMiddlewareOptions)
 
+// LogLevel sets the [zapcore.Level] at which non-errors requests are logged.
 func LogLevel(level zapcore.Level) LoggingMiddlewareOption {
 	return func(opts *loggingMiddlewareOptions) {
 		opts.level = level
 	}
 }
 
-func LogOnlyErrors(enabled bool) LoggingMiddlewareOption {
+// LogCheck sets a callback that will be called to verify if a particular request should be logged when it finished with a non-error status code.
+// In other words:
+// * if the status code is < 400 `fn` is called to verify if we should log the request or not
+// * if the status code is >= 400 `fn` is not called and the request is logged anyway
+//
+// This is useful if you have a route for which you only care about errors, for example a status route:
+//
+//	LogCheck(func(r *http.Request) bool {
+//	    // Log every request except /status
+//	    return r.URL.Path != "/status"
+//	})
+func LogCheck(fn func(*http.Request) bool) LoggingMiddlewareOption {
 	return func(opts *loggingMiddlewareOptions) {
-		opts.onlyErrors = enabled
+		opts.logCheckFn = fn
 	}
 }
 
@@ -52,33 +62,35 @@ func LogOnlyErrors(enabled bool) LoggingMiddlewareOption {
 // This isn't always what you want, because if you have a middleware in the chain that can take some measurable time, you probably
 // want to count it too in the execution time.
 // Thus, make sure you place the logging handler at the correct place in the chain.
-func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bunrouter.MiddlewareFunc {
+func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) Middleware {
 	opts := newDefaultLoggingMiddlewareOptions()
 	for _, o := range opt {
 		o(opts)
 	}
 
-	return func(next bunrouter.HandlerFunc) bunrouter.HandlerFunc {
-		return func(w http.ResponseWriter, r bunrouter.Request) error {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			lw := internal.NewLoggingWriter(w)
 
 			ru := *r.URL
 			ru.Host = ""
 
 			start := time.Now()
-			next.ServeHTTP(lw, r.Request)
+			next.ServeHTTP(lw, r)
 			elapsed := time.Since(start)
 
 			switch {
-			case opts.onlyErrors && lw.StatusCode < 400:
-				// No logging for non-errors
-				return nil
+			case lw.StatusCode < 400:
+				// Check if we should log non-errors. By default everything is logged.
+				if opts.logCheckFn != nil && !opts.logCheckFn(r) {
+					return
+				}
 
-			case !opts.onlyErrors && lw.StatusCode < 400:
 				// Log using the provided level for non-errors
 
 				logger.Log(opts.level, "request handled",
 					zap.Stringer("url", &ru),
+					zap.String("method", r.Method),
 					zap.Int("status_code", lw.StatusCode),
 					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
@@ -89,6 +101,7 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bu
 
 				logger.Warn("request handled",
 					zap.Stringer("url", &ru),
+					zap.String("method", r.Method),
 					zap.Int("status_code", lw.StatusCode),
 					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
@@ -99,13 +112,12 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bu
 
 				logger.Error("request handled",
 					zap.Stringer("url", &ru),
+					zap.String("method", r.Method),
 					zap.Int("status_code", lw.StatusCode),
 					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
 				)
 			}
-
-			return nil
-		}
+		})
 	}
 }
