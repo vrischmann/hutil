@@ -6,9 +6,9 @@ hutil is a set of helpers to work with `net/http`. It's limited by design, based
 
 # Middleware
 
-The most useful type is `hutil.MiddlewareStack`. It is used to stack middlewares and wrap a [http.Handler](https://pkg.go.dev/net/http#Handler). Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v3#MiddlewareStack) to see how to use it.
+The most useful type is `hutil.MiddlewareStack`. It is used to stack middlewares and wrap a [http.Handler](https://pkg.go.dev/net/http#Handler). Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v4#MiddlewareStack) to see how to use it.
 
-We also provide a logging middleware. Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v3#NewLoggingMiddleware) to see how to use it.
+We also provide a logging middleware. Look at the documentation [here](https://pkg.go.dev/github.com/vrischmann/hutil/v4#NewLoggingMiddleware) to see how to use it.
 
 # Logging
 
