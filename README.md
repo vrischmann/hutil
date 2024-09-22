@@ -15,10 +15,8 @@ We also provide a logging middleware. Look at the documentation [here](https://p
 You can get a logging middlware this way:
 
 ```go
-logFn := func(req *http.Request, statusCode int, responseSize int, elapsed time.Duration) {
-    log.Printf("[%s] %s -> %d: %s", http.StatusText(statusCode), req.URL.Path, responseSize, elapsed)
-}
-m := hutil.NewLoggingMiddleware(logFn)
+logger := zap.NewExample()
+m := hutil.NewLoggingMiddleware(logger)
 ```
 
 # Shift path
