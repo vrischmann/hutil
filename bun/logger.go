@@ -1,13 +1,11 @@
 package bun
 
 import (
-	"bufio"
-	"errors"
-	"net"
 	"net/http"
 	"time"
 
 	"github.com/uptrace/bunrouter"
+	"github.com/vrischmann/hutil/v4/internal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -62,7 +60,7 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bu
 
 	return func(next bunrouter.HandlerFunc) bunrouter.HandlerFunc {
 		return func(w http.ResponseWriter, r bunrouter.Request) error {
-			lw := &loggingWriter{underlying: w}
+			lw := internal.NewLoggingWriter(w)
 
 			ru := *r.URL
 			ru.Host = ""
@@ -72,37 +70,37 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bu
 			elapsed := time.Since(start)
 
 			switch {
-			case opts.onlyErrors && lw.statusCode < 400:
+			case opts.onlyErrors && lw.StatusCode < 400:
 				// No logging for non-errors
 				return nil
 
-			case !opts.onlyErrors && lw.statusCode < 400:
+			case !opts.onlyErrors && lw.StatusCode < 400:
 				// Log using the provided level for non-errors
 
 				logger.Log(opts.level, "request handled",
 					zap.Stringer("url", &ru),
-					zap.Int("status_code", lw.statusCode),
-					zap.Int("response_size", lw.size),
+					zap.Int("status_code", lw.StatusCode),
+					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
 				)
 
-			case lw.statusCode >= 400 && lw.statusCode < 500:
+			case lw.StatusCode >= 400 && lw.StatusCode < 500:
 				// Log using the WARN level for 4xx errors
 
 				logger.Warn("request handled",
 					zap.Stringer("url", &ru),
-					zap.Int("status_code", lw.statusCode),
-					zap.Int("response_size", lw.size),
+					zap.Int("status_code", lw.StatusCode),
+					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
 				)
 
-			case lw.statusCode > 500:
+			case lw.StatusCode > 500:
 				// Log using the ERROR level for 5xx errors and up
 
 				logger.Error("request handled",
 					zap.Stringer("url", &ru),
-					zap.Int("status_code", lw.statusCode),
-					zap.Int("response_size", lw.size),
+					zap.Int("status_code", lw.StatusCode),
+					zap.Int("response_size", lw.Size),
 					zap.Duration("elapsed", elapsed),
 				)
 			}
@@ -111,34 +109,3 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) bu
 		}
 	}
 }
-
-type loggingWriter struct {
-	underlying http.ResponseWriter
-	statusCode int
-	size       int
-}
-
-func (w *loggingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	v, ok := w.underlying.(http.Hijacker)
-	if !ok {
-		panic(errors.New("response writer does not implement Hijacker"))
-	}
-
-	return v.Hijack()
-}
-
-func (w *loggingWriter) Header() http.Header {
-	return w.underlying.Header()
-}
-
-func (w *loggingWriter) Write(b []byte) (n int, err error) {
-	w.size += len(b)
-	return w.underlying.Write(b)
-}
-
-func (w *loggingWriter) WriteHeader(code int) {
-	w.statusCode = code
-	w.underlying.WriteHeader(code)
-}
-
-var _ http.ResponseWriter = (*loggingWriter)(nil)
