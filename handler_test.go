@@ -94,3 +94,189 @@ func TestHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestHandlerStack(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	var mw HandlerStack[myHandlerContext]
+
+	mw.Add(myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		logger.Info("first one")
+		return nil
+	}))
+
+	mw.Add(myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		logger.Info("second one")
+		return nil
+	}))
+
+	mw.Add(myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		logger.Info("third one")
+		return nil
+	}))
+
+	mw.Add(myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		logger.Info("final one")
+
+		w.WriteHeader(http.StatusFound)
+
+		return nil
+	}))
+
+	require.Len(t, mw.handlers, 4)
+
+	//
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var hctx myHandlerContext
+
+		handler := mw.Handler(myHandlerFunc(func(ctx context.Context, hctx myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+			return nil
+		}))
+
+		err := handler.Handle(req.Context(), hctx, w, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+}
+
+func TestHandlerStackDiverge(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	calls := map[string]int{}
+
+	first := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["first"] += 1
+		logger.Info("first one")
+		return nil
+	})
+	second := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["second"] += 1
+		logger.Info("second one")
+		return nil
+	})
+	third := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["third"] += 1
+		logger.Info("third one")
+		return nil
+	})
+	final := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["final"] += 1
+		logger.Info("final one")
+		w.WriteHeader(http.StatusConflict)
+		return nil
+	})
+
+	stack := NewHandlerStack(first, second)
+
+	clonedMW := stack.Diverge()
+	clonedMW.Add(third)
+	require.Len(t, clonedMW.handlers, 3)
+
+	stack.Add(final)
+	require.Len(t, stack.handlers, 3)
+
+	//
+
+	serve := func(st *HandlerStack[myHandlerContext]) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			var hctx myHandlerContext
+
+			handler := st.Handler(myHandlerFunc(func(ctx context.Context, hctx myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+				return nil
+			}))
+
+			err := handler.Handle(req.Context(), hctx, w, req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}))
+	}
+
+	{
+		ts := serve(stack)
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
+
+		require.Equal(t, map[string]int{"first": 1, "second": 1, "final": 1}, calls)
+	}
+
+	{
+		ts := serve(clonedMW)
+		defer ts.Close()
+
+		resp, err := http.Get(ts.URL)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		require.Equal(t, map[string]int{"first": 2, "second": 2, "third": 1, "final": 1}, calls)
+	}
+}
+
+func TestHandlerStackError(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	calls := map[string]int{}
+
+	first := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["first"] += 1
+		logger.Info("first one")
+		return nil
+	})
+	second := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["second"] += 1
+		logger.Error("second one")
+		return errors.New("got error")
+	})
+	third := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["third"] += 1
+		logger.Info("third one")
+		return nil
+	})
+	final := myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+		calls["final"] += 1
+		logger.Info("final one")
+		w.WriteHeader(http.StatusConflict)
+		return nil
+	})
+
+	mw := NewHandlerStack(
+		first, second, third, final,
+	)
+	require.Len(t, mw.handlers, 4)
+
+	//
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var hctx myHandlerContext
+
+		handler := mw.Handler(myHandlerFunc(func(ctx context.Context, hctx myHandlerContext, w http.ResponseWriter, req *http.Request) error {
+			return nil
+		}))
+
+		err := handler.Handle(req.Context(), hctx, w, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, "got error\n", string(data))
+
+	require.Equal(t, map[string]int{"first": 1, "second": 1}, calls)
+}
