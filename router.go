@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+type Middleware[C any] func(next Handler[C]) Handler[C]
+
 // Handler is my own version of a HTTP handler.
 //
 // The standard [http.Handler] is almost perfect except for the fact that it can't return an error, this is the main change I added.
@@ -17,22 +19,20 @@ import (
 // Finally, I explicitly add a [context.Context] instead of relying on the request' context: this is because I want every handler to
 // have a context with a timeout. I _could_ create a new request with this new context but that is an expensive operation.
 type Handler[HandlerContext any] interface {
-	Handle(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error
+	Handle(ctx context.Context, hctx HandlerContext, w http.ResponseWriter, req *http.Request) error
 }
 
 // HandlerFunc is the function version of a [Handler].
-type HandlerFunc[HandlerContext any] func(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error
+type HandlerFunc[C any] func(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error
 
 // Handle implements [Handler].
-func (f HandlerFunc[HandlerContext]) Handle(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error {
-	return f(ctx, handlerCtx, w, req)
+func (f HandlerFunc[C]) Handle(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error {
+	return f(ctx, hctx, w, req)
 }
 
 // Router is a stack of [Handler]. You stack a handler by calling [Router.Add].
 //
 // You can then call [Router.Handler] to get a handler that calls every handler sequentially.
-//
-// This type is similar to [MiddlewareStack] but better because it works nicely with [Handler].
 //
 // # Advantages
 //
@@ -89,13 +89,13 @@ func (f HandlerFunc[HandlerContext]) Handle(ctx context.Context, handlerCtx Hand
 //	    }))
 //	}
 type Router[C any] struct {
-	handlers []Handler[C]
+	middlewares []Middleware[C]
 }
 
 // NewRouter creates a new [Router] with the provided handlers.
-func NewRouter[C any](handler ...Handler[C]) *Router[C] {
+func NewRouter[C any](middleware ...Middleware[C]) *Router[C] {
 	return &Router[C]{
-		handlers: handler,
+		middlewares: middleware,
 	}
 }
 
@@ -110,26 +110,8 @@ func NewRouter[C any](handler ...Handler[C]) *Router[C] {
 //		Add(hutil.HandlerFunc[struct{}](func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
 //			return nil
 //		}))
-func (s *Router[C]) Add(handler Handler[C]) *Router[C] {
-	s.handlers = append(s.handlers, handler)
-	return s
-}
-
-// AddFunc adds a [Handler] to the stack by wrapping `handler` into a [HandlerFunc]. Returns the stack as well.
-//
-// This can be used to chain calls:
-//
-//	stdHandlers := hutil.NewRouter[struct{}]()
-//
-//	loggedInHandlers := stdHandlers.Diverge().
-//		AddFunc(func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
-//			return nil
-//		}).
-//		AddFunc(func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
-//			return nil
-//		})
-func (s *Router[C]) AddFunc(handler func(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error) *Router[C] {
-	s.handlers = append(s.handlers, HandlerFunc[C](handler))
+func (s *Router[C]) Use(middleware Middleware[C]) *Router[C] {
+	s.middlewares = append(s.middlewares, middleware)
 	return s
 }
 
@@ -167,25 +149,26 @@ func (s *Router[C]) AddFunc(handler func(ctx context.Context, hctx C, w http.Res
 //		return nil
 //	})
 func (s *Router[C]) Diverge() *Router[C] {
-	tmp := make([]Handler[C], len(s.handlers))
-	copy(tmp, s.handlers)
+	tmp := make([]Middleware[C], len(s.middlewares))
+	copy(tmp, s.middlewares)
 
-	return &Router[C]{handlers: tmp}
+	return &Router[C]{middlewares: tmp}
 }
 
 // Handler creates a [Handler] that calls every handler in the stack plus the `finalHandler` provided.
 // Every handler is called sequentially; if a handler returns an error this error is returned and no further handler in the stack will be called.
 func (s *Router[C]) Handler(finalHandler Handler[C]) Handler[C] {
-	return HandlerFunc[C](func(ctx context.Context, handlerContext C, w http.ResponseWriter, req *http.Request) error {
-		for _, handler := range s.handlers {
-			err := handler.Handle(ctx, handlerContext, w, req)
-			if err != nil {
-				return err
-			}
-		}
+	h := finalHandler
 
-		return finalHandler.Handle(ctx, handlerContext, w, req)
-	})
+	count := 0
+	for i := len(s.middlewares) - 1; i >= 0; i-- {
+		middleware := s.middlewares[i]
+		h = middleware(h)
+
+		count++
+	}
+
+	return h
 }
 
 // HandlerFunc creates a [Handler] that calls every handler in the stack plus the final handler provided.
@@ -195,14 +178,5 @@ func (s *Router[C]) Handler(finalHandler Handler[C]) Handler[C] {
 func (s *Router[C]) HandlerFunc(fn func(ctx context.Context, handlerContext C, w http.ResponseWriter, req *http.Request) error) Handler[C] {
 	finalHandler := HandlerFunc[C](fn)
 
-	return HandlerFunc[C](func(ctx context.Context, handlerContext C, w http.ResponseWriter, req *http.Request) error {
-		for _, handler := range s.handlers {
-			err := handler.Handle(ctx, handlerContext, w, req)
-			if err != nil {
-				return err
-			}
-		}
-
-		return finalHandler.Handle(ctx, handlerContext, w, req)
-	})
+	return s.Handler(finalHandler)
 }

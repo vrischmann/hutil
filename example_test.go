@@ -11,34 +11,32 @@ import (
 	"strings"
 )
 
-func ExampleMiddlewareStack() {
-	createMiddleware := func(buf *bytes.Buffer, s string) func(next http.Handler) http.Handler {
-		return func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-				buf.WriteString(s)
-				next.ServeHTTP(w, req)
-			})
-		}
+func createMiddleware[C any](buf *bytes.Buffer, s string) func(next Handler[C]) Handler[C] {
+	return func(next Handler[C]) Handler[C] {
+		return HandlerFunc[C](func(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error {
+			buf.WriteString(s)
+			return next.Handle(ctx, hctx, w, req)
+		})
 	}
+}
 
+func ExampleRouter_Use() {
 	var (
-		s   MiddlewareStack
-		buf bytes.Buffer
+		router = NewRouter[struct{}]()
+		buf    bytes.Buffer
+		m1     = createMiddleware[struct{}](&buf, "m1")
+		m2     = createMiddleware[struct{}](&buf, "m2")
+		m3     = createMiddleware[struct{}](&buf, "m3")
 	)
 
-	var (
-		m1 = createMiddleware(&buf, "m1")
-		m2 = createMiddleware(&buf, "m2")
-		m3 = createMiddleware(&buf, "m3")
-	)
+	router.Use(m1).Use(m2).Use(m3)
 
-	s.Use(m1)
-	s.Use(m2)
-	s.Use(m3)
-
-	ts := httptest.NewServer(s.Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := router.HandlerFunc(func(ctx context.Context, hctx struct{}, w http.ResponseWriter, _ *http.Request) error {
 		fmt.Fprint(w, "foobar")
-	})))
+		return nil
+	})
+
+	ts := httptest.NewServer(adaptHandler(handler))
 	defer ts.Close()
 
 	res, _ := http.Get(ts.URL)
@@ -53,54 +51,50 @@ func ExampleMiddlewareStack() {
 	// m1m2m3
 }
 
-func ExampleHandlerStack() {
+func ExampleRouter_Diverge() {
 	var (
 		errNotLoggedIn = errors.New("not logged in")
 		errNotAdmin    = errors.New("not admin")
 	)
 
-	// This handler stack simulates a handler that fetches a user from a database using a session id.
-	loggedInHandlers := NewRouter(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
-		sessionID := req.URL.Query().Get("session")
-		if sessionID == "" {
-			return errNotLoggedIn
-		}
-		// fetch session from database
-		return nil
-	}))
-
-	// This handler stack simulats a handler that verifies that a user is an administrator.
-	adminHandlers := loggedInHandlers.Diverge().Add(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
-		role := req.URL.Query().Get("role") // fetch role from database
-		if role != "admin" {
-			return errNotAdmin
-		}
-		return nil
-	}))
-
-	makeHandlerAdapter := func(handler Handler[*string]) func(http.ResponseWriter, *http.Request) {
-		return func(w http.ResponseWriter, req *http.Request) {
-			var hctx string
-
-			if err := handler.Handle(req.Context(), &hctx, w, req); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+	sessionMiddleware := Middleware[*string](func(next Handler[*string]) Handler[*string] {
+		return HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+			sessionID := req.URL.Query().Get("session")
+			if sessionID == "" {
+				return errNotLoggedIn
 			}
-		}
-	}
+			// fetch session from database
+			return next.Handle(ctx, hctx, w, req)
+		})
+	})
+
+	router := NewRouter[*string]().Use(sessionMiddleware)
+
+	adminMiddleware := Middleware[*string](func(next Handler[*string]) Handler[*string] {
+		return HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+			role := req.URL.Query().Get("role") // fetch role from database
+			if role != "admin" {
+				return errNotAdmin
+			}
+			return next.Handle(ctx, hctx, w, req)
+		})
+	})
+
+	adminRouter := router.Diverge().Use(adminMiddleware)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /dashboard", makeHandlerAdapter(loggedInHandlers.Handler(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+	mux.Handle("GET /dashboard", adaptHandler(router.HandlerFunc(func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
 		io.WriteString(w, "this is dashboard")
 		return nil
-	}))))
-	mux.HandleFunc("GET /admin", makeHandlerAdapter(adminHandlers.Handler(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+	})))
+	mux.Handle("GET /admin", adaptHandler(adminRouter.HandlerFunc(func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
 		io.WriteString(w, "this is admin")
 		return nil
-	}))))
-	mux.HandleFunc("GET /other", makeHandlerAdapter(loggedInHandlers.Handler(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+	})))
+	mux.Handle("GET /other", adaptHandler(router.HandlerFunc(func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
 		io.WriteString(w, "this is other")
 		return nil
-	}))))
+	})))
 
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
@@ -128,4 +122,15 @@ func ExampleHandlerStack() {
 	// not admin
 	// this is admin
 	// this is other
+}
+
+func adaptHandler[C any](handler Handler[C]) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var hctx C
+
+		err := handler.Handle(req.Context(), hctx, w, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 }

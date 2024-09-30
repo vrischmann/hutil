@@ -1,6 +1,7 @@
 package hutil
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,16 +21,16 @@ func TestLoggingHandler(t *testing.T) {
 
 	//
 
-	var s MiddlewareStack
-	s.Use(NewLoggingMiddleware(logger))
+	router := NewRouter(NewLoggingMiddleware[struct{}](logger))
 
-	fh := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	fh := func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
 		w.WriteHeader(http.StatusOK)
 		io.WriteString(w, "foobar")
 		time.Sleep(500 * time.Millisecond)
-	})
+		return nil
+	}
 
-	ts := httptest.NewServer(s.Handler(fh))
+	ts := httptest.NewServer(adaptHandler(router.HandlerFunc(fh)))
 	defer ts.Close()
 
 	resp, err := http.Get(ts.URL + "/foo/bar/baz")

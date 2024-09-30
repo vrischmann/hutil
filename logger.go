@@ -1,6 +1,7 @@
 package hutil
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -62,28 +63,39 @@ func LogCheck(fn func(*http.Request) bool) LoggingMiddlewareOption {
 // This isn't always what you want, because if you have a middleware in the chain that can take some measurable time, you probably
 // want to count it too in the execution time.
 // Thus, make sure you place the logging handler at the correct place in the chain.
-func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) Middleware {
+func NewLoggingMiddleware[C any](logger *zap.Logger, opt ...LoggingMiddlewareOption) Middleware[C] {
 	opts := newDefaultLoggingMiddlewareOptions()
 	for _, o := range opt {
 		o(opts)
 	}
 
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(next Handler[C]) Handler[C] {
+		return HandlerFunc[C](func(ctx context.Context, hctx C, w http.ResponseWriter, r *http.Request) error {
 			lw := internal.NewLoggingWriter(w)
 
 			ru := *r.URL
 			ru.Host = ""
 
 			start := time.Now()
-			next.ServeHTTP(lw, r)
+			err := next.Handle(ctx, hctx, lw, r)
 			elapsed := time.Since(start)
+
+			if err != nil {
+				logger.Error("request handled",
+					zap.Stringer("url", &ru),
+					zap.String("method", r.Method),
+					zap.Int("status_code", lw.StatusCode),
+					zap.Int("response_size", lw.Size),
+					zap.Duration("elapsed", elapsed),
+				)
+				return nil
+			}
 
 			switch {
 			case lw.StatusCode < 400:
 				// Check if we should log non-errors. By default everything is logged.
 				if opts.logCheckFn != nil && !opts.logCheckFn(r) {
-					return
+					return nil
 				}
 
 				// Log using the provided level for non-errors
@@ -118,6 +130,8 @@ func NewLoggingMiddleware(logger *zap.Logger, opt ...LoggingMiddlewareOption) Mi
 					zap.Duration("elapsed", elapsed),
 				)
 			}
+
+			return nil
 		})
 	}
 }
