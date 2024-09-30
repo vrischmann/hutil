@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/vrischmann/hutil/v4/internal"
+	"github.com/vrischmann/hutil/v5/internal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
