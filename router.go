@@ -72,7 +72,7 @@ func (f HandlerFunc[HandlerContext]) Handle(ctx context.Context, handlerCtx Hand
 //	        return nil
 //	    })
 //
-//	    stack := hutil.NewHandlerStack(
+//	    stack := hutil.NewRouter(
 //	    	fetchUserHandler,
 //	    	fetchUserProfileHandler,
 //	    	getRateLimiterHandler,
@@ -92,8 +92,8 @@ type Router[C any] struct {
 	handlers []Handler[C]
 }
 
-// NewHandlerStack creates a new [Router] with the provided handlers.
-func NewHandlerStack[C any](handler ...Handler[C]) *Router[C] {
+// NewRouter creates a new [Router] with the provided handlers.
+func NewRouter[C any](handler ...Handler[C]) *Router[C] {
 	return &Router[C]{
 		handlers: handler,
 	}
@@ -103,7 +103,7 @@ func NewHandlerStack[C any](handler ...Handler[C]) *Router[C] {
 //
 // This can be used to chain calls:
 //
-//	loggedInHandlers := hutil.NewHandlerStack[struct{}]().
+//	loggedInHandlers := hutil.NewRouter[struct{}]().
 //		Add(hutil.HandlerFunc[struct{}](func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
 //			return nil
 //		})).
@@ -119,7 +119,7 @@ func (s *Router[C]) Add(handler Handler[C]) *Router[C] {
 //
 // This can be used to chain calls:
 //
-//	stdHandlers := hutil.NewHandlerStack[struct{}]()
+//	stdHandlers := hutil.NewRouter[struct{}]()
 //
 //	loggedInHandlers := stdHandlers.Diverge().
 //		AddFunc(func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
@@ -142,7 +142,7 @@ func (s *Router[C]) AddFunc(handler func(ctx context.Context, hctx C, w http.Res
 //
 // Diverge can help with that:
 //
-//	stdHandlers := hutil.NewHandlerStack(hutil.HandlerFunc[struct{}](func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
+//	stdHandlers := hutil.NewRouter(hutil.HandlerFunc[struct{}](func(ctx context.Context, hctx struct{}, w http.ResponseWriter, req *http.Request) error {
 //		// std handler one
 //		return nil
 //	}))

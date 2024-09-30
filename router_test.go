@@ -172,7 +172,7 @@ func TestHandlerStackDiverge(t *testing.T) {
 		return nil
 	})
 
-	stack := NewHandlerStack(first, second)
+	stack := NewRouter(first, second)
 
 	clonedMW := stack.Diverge()
 	clonedMW.Add(third)
@@ -248,7 +248,7 @@ func TestHandlerStackError(t *testing.T) {
 		return nil
 	})
 
-	mw := NewHandlerStack(
+	mw := NewRouter(
 		first, second, third, final,
 	)
 	require.Len(t, mw.handlers, 4)

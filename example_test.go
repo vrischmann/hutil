@@ -60,7 +60,7 @@ func ExampleHandlerStack() {
 	)
 
 	// This handler stack simulates a handler that fetches a user from a database using a session id.
-	loggedInHandlers := NewHandlerStack(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
+	loggedInHandlers := NewRouter(HandlerFunc[*string](func(ctx context.Context, hctx *string, w http.ResponseWriter, req *http.Request) error {
 		sessionID := req.URL.Query().Get("session")
 		if sessionID == "" {
 			return errNotLoggedIn
