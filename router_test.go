@@ -97,7 +97,7 @@ func TestHandler(t *testing.T) {
 
 func TestHandlerStack(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	var mw HandlerStack[myHandlerContext]
+	var mw Router[myHandlerContext]
 
 	mw.Add(myHandlerFunc(func(ctx context.Context, handlerContext myHandlerContext, w http.ResponseWriter, req *http.Request) error {
 		logger.Info("first one")
@@ -183,7 +183,7 @@ func TestHandlerStackDiverge(t *testing.T) {
 
 	//
 
-	serve := func(st *HandlerStack[myHandlerContext]) *httptest.Server {
+	serve := func(st *Router[myHandlerContext]) *httptest.Server {
 		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			var hctx myHandlerContext
 
