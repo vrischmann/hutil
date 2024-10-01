@@ -16,14 +16,14 @@ import (
 //
 // Finally, I explicitly add a [context.Context] instead of relying on the request' context: this is because I want every handler to
 // have a context with a timeout. I _could_ create a new request with this new context but that is an expensive operation.
-type Handler[HandlerContext any] interface {
-	Handle(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error
+type Handler[C any] interface {
+	Handle(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error
 }
 
 // HandlerFunc is the function version of a [Handler].
-type HandlerFunc[HandlerContext any] func(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error
+type HandlerFunc[C any] func(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error
 
 // Handle implements [Handler].
-func (f HandlerFunc[HandlerContext]) Handle(ctx context.Context, handlerCtx HandlerContext, w http.ResponseWriter, req *http.Request) error {
-	return f(ctx, handlerCtx, w, req)
+func (f HandlerFunc[C]) Handle(ctx context.Context, hctx C, w http.ResponseWriter, req *http.Request) error {
+	return f(ctx, hctx, w, req)
 }
